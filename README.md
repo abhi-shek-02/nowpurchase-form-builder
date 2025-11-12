@@ -35,14 +35,19 @@ A modern React-based admin panel for managing dynamic forms with a drag-and-drop
    Create `.env.qa` file for QA environment:
    ```bash
    VITE_API_BASE_URL=https://test-api.nowpurchase.com/api
+   VITE_AUTH_BASE_URL=https://test-api.nowpurchase.com
    ```
 
    Create `.env.production` file for production environment:
    ```bash
    VITE_API_BASE_URL=https://api.nowpurchase.com/api
+   VITE_AUTH_BASE_URL=https://api.nowpurchase.com
    ```
 
-   > **Note**: Environment files are gitignored. Make sure to create them before running the project.
+   > **Note**: 
+   > - `VITE_API_BASE_URL` is used for regular API endpoints (includes `/api`)
+   > - `VITE_AUTH_BASE_URL` is used for authentication/OTP endpoints (no `/api`, just domain)
+   > - Environment files are gitignored. Make sure to create them before running the project.
 
 ## 🏃 Running the Project
 

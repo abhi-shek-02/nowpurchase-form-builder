@@ -96,7 +96,6 @@ function ViewForm() {
 
   const actions = useMemo(() => ({
     onSubmit: (e) => {
-      console.log("Form submitted:", e.data);
       toast.success("Form submitted successfully!");
     },
   }), []);

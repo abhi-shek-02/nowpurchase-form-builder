@@ -1,84 +1,216 @@
-import { useState } from "react";
-import { setToken, apiLogin } from "../../services/api";
+import { useState, useEffect, useRef } from "react";
+import { setToken, sendOTP, verifyOTP } from "../../services/api";
 import "./Login.css";
 
 function Login({ onLogin }) {
   const [mobile, setMobile] = useState("");
-  const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const otpInputRef = useRef(null);
 
-  const handleSubmit = async (e) => {
+  // Countdown timer for resend OTP
+  useEffect(() => {
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [countdown]);
+
+  // Focus OTP input when OTP is sent
+  useEffect(() => {
+    if (otpSent && otpInputRef.current) {
+      otpInputRef.current.focus();
+    }
+  }, [otpSent]);
+
+  const handleSendOTP = async (e) => {
     e.preventDefault();
     setError("");
+    
+    if (!mobile || mobile.length !== 10) {
+      setError("Please enter a valid 10-digit mobile number");
+      return;
+    }
+
     setLoading(true);
 
     try {
       // Automatically prepend +91 to mobile number
       const mobileWithPrefix = mobile.startsWith('+91') ? mobile : `+91${mobile}`;
-      const response = await apiLogin(mobileWithPrefix, password);
+      const response = await sendOTP(mobileWithPrefix);
       
-      // Extract token from response: { token: "...", name: "...", mobile: "..." }
+      // Check if OTP was sent successfully
+      if (response?.detail || response) {
+        setOtpSent(true);
+        setCountdown(60); // 60 seconds countdown
+        setError("");
+      } else {
+        setError("Failed to send OTP. Please try again.");
+      }
+    } catch (err) {
+      setError(err.message || "Failed to send OTP. Please check your mobile number and try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOTP = async (e) => {
+    e.preventDefault();
+    setError("");
+    
+    if (!otp || otp.length !== 4) {
+      setError("Please enter a valid 4-digit OTP");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Automatically prepend +91 to mobile number
+      const mobileWithPrefix = mobile.startsWith('+91') ? mobile : `+91${mobile}`;
+      const response = await verifyOTP(mobileWithPrefix, otp);
+      
+      // Extract token from response: { token: "...", is_terms_accepted: true }
       const token = response?.token;
       
       if (token) {
         setToken(token, true);
         onLogin();
       } else {
-        setError("Login successful but no token received from server");
+        setError("Verification successful but no token received from server");
       }
     } catch (err) {
-      setError(err.message || "Login failed. Please check your credentials and try again.");
+      setError(err.message || "Invalid OTP. Please check and try again.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleResendOTP = async () => {
+    if (countdown > 0) return;
+    
+    setError("");
+    setOtp("");
+    setLoading(true);
+
+    try {
+      const mobileWithPrefix = mobile.startsWith('+91') ? mobile : `+91${mobile}`;
+      const response = await sendOTP(mobileWithPrefix);
+      
+      if (response?.detail || response) {
+        setCountdown(60);
+        setError("");
+      } else {
+        setError("Failed to resend OTP. Please try again.");
+      }
+    } catch (err) {
+      setError(err.message || "Failed to resend OTP. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBackToMobile = () => {
+    setOtpSent(false);
+    setOtp("");
+    setError("");
+    setCountdown(0);
   };
 
   return (
     <div className="login-container">
       <div className="login-card">
         <h2>Admin Login</h2>
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="mobile">Mobile</label>
-            <div className="mobile-input-wrapper">
-              <span className="mobile-prefix">+91</span>
+        {!otpSent ? (
+          <form onSubmit={handleSendOTP}>
+            <div className="form-group">
+              <label htmlFor="mobile">Mobile Number</label>
+              <div className="mobile-input-wrapper">
+                <span className="mobile-prefix">+91</span>
+                <input
+                  type="text"
+                  id="mobile"
+                  value={mobile}
+                  onChange={(e) => {
+                    // Remove +91 if user tries to type it, only allow digits
+                    const value = e.target.value.replace(/\+91/g, '').replace(/\D/g, '');
+                    setMobile(value);
+                  }}
+                  placeholder="Enter mobile number"
+                  maxLength={10}
+                  required
+                  disabled={loading}
+                />
+              </div>
+            </div>
+            {error && <div className="error-message">{error}</div>}
+            <button type="submit" className="login-button" disabled={loading}>
+              {loading ? "Sending OTP..." : "Send OTP"}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleVerifyOTP}>
+            <div className="otp-info">
+              <p className="otp-message">
+                We've sent a verification code to <strong>+91 {mobile}</strong>
+              </p>
+              <button
+                type="button"
+                className="change-number-link"
+                onClick={handleBackToMobile}
+                disabled={loading}
+              >
+                Change number
+              </button>
+            </div>
+            <div className="form-group">
+              <label htmlFor="otp">Enter OTP</label>
               <input
+                ref={otpInputRef}
                 type="text"
-                id="mobile"
-                value={mobile}
+                id="otp"
+                value={otp}
                 onChange={(e) => {
-                  // Remove +91 if user tries to type it, only allow digits
-                  const value = e.target.value.replace(/\+91/g, '').replace(/\D/g, '');
-                  setMobile(value);
+                  // Only allow digits, max 4 digits
+                  const value = e.target.value.replace(/\D/g, '').slice(0, 4);
+                  setOtp(value);
                 }}
-                placeholder="Enter mobile number"
-                maxLength={10}
+                placeholder="Enter 4-digit OTP"
+                maxLength={4}
                 required
+                disabled={loading}
+                className="otp-input"
               />
             </div>
-          </div>
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <input
-              type="password"
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password"
-              required
-            />
-          </div>
-          {error && <div className="error-message">{error}</div>}
-          <button type="submit" className="login-button" disabled={loading}>
-            {loading ? "Logging in..." : "Login"}
-          </button>
-        </form>
+            {error && <div className="error-message">{error}</div>}
+            <button type="submit" className="login-button" disabled={loading}>
+              {loading ? "Verifying..." : "Verify OTP"}
+            </button>
+            <div className="resend-otp">
+              {countdown > 0 ? (
+                <span className="resend-countdown">
+                  Resend OTP in {countdown}s
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="resend-button"
+                  onClick={handleResendOTP}
+                  disabled={loading}
+                >
+                  Resend OTP
+                </button>
+              )}
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );
 }
 
 export default Login;
-
 

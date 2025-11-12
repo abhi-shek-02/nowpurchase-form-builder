@@ -65,21 +65,3 @@ export const getFieldErrors = (error) => {
   return error.details;
 };
 
-export const isValidationError = (error) => {
-  return error?.code === 'validation_error' || error?.status === 400;
-};
-
-export const isAuthenticationError = (error) => {
-  return error?.code === 'authentication_failed' || error?.status === 401;
-};
-
-export const isNetworkError = (error) => {
-  return error?.code === 'network_error' || error?.status === 0;
-};
-
-export const logError = (error, context = '') => {
-  if (import.meta.env.DEV) {
-    console.error(`[Error${context ? ` in ${context}` : ''}]:`, error);
-  }
-};
-

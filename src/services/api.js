@@ -1,7 +1,13 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+const AUTH_BASE_URL = import.meta.env.VITE_AUTH_BASE_URL || '';
+const DEVICE_TYPE = import.meta.env.VITE_DEVICE_TYPE || 'WEB';
 
 if (!API_BASE_URL && import.meta.env.DEV) {
   console.warn('VITE_API_BASE_URL is not set in .env file');
+}
+
+if (!AUTH_BASE_URL && import.meta.env.DEV) {
+  console.warn('VITE_AUTH_BASE_URL is not set in .env file');
 }
 
 export const getToken = () => localStorage.getItem('auth') || sessionStorage.getItem('auth');
@@ -145,30 +151,47 @@ export const apiPut = async (endpoint, data = {}, options = {}) => {
   return parseJson(response);
 };
 
-export const apiPatch = async (endpoint, data = {}, options = {}) => {
-  const response = await request(endpoint, {
-    ...options,
-    method: 'PATCH',
-    body: JSON.stringify(data),
-  });
-  return parseJson(response);
+// Generate or retrieve device ID (consistent per browser)
+const getDeviceId = () => {
+  const storageKey = 'device_id';
+  let deviceId = localStorage.getItem(storageKey);
+  
+  if (!deviceId) {
+    // Generate a unique device ID (similar to the example format)
+    const randomBytes = new Uint8Array(32);
+    crypto.getRandomValues(randomBytes);
+    deviceId = Array.from(randomBytes)
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    localStorage.setItem(storageKey, deviceId);
+  }
+  
+  return deviceId;
 };
 
-export const apiDelete = async (endpoint, options = {}) => {
-  const response = await request(endpoint, { ...options, method: 'DELETE' });
-  return parseJson(response);
+// Get Auth base URL for OTP endpoints
+// Uses separate VITE_AUTH_BASE_URL environment variable
+// Auth endpoints are at domain.com/a/auth/, not under /api/
+const getAuthBaseUrl = () => {
+  if (!AUTH_BASE_URL) {
+    throw new Error('VITE_AUTH_BASE_URL is not configured. Please set it in your .env file (e.g., https://test-api.nowpurchase.com)');
+  }
+  
+  // Remove trailing slash if present
+  return AUTH_BASE_URL.replace(/\/$/, '');
 };
 
-// Login function without authentication token
-export const apiLogin = async (mobile, password) => {
-  const url = `${API_BASE_URL}/mobile_pass_login/`;
+// Send OTP to mobile number
+export const sendOTP = async (mobile) => {
+  const baseUrl = getAuthBaseUrl();
+  const url = `${baseUrl}/a/auth/mobile/`;
   
   const config = {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ mobile, password }),
+    body: JSON.stringify({ mobile }),
   };
 
   try {
@@ -182,9 +205,47 @@ export const apiLogin = async (mobile, password) => {
     if (error.code) throw error;
     throw {
       code: 'network_error',
-      message: error.message || 'Network request failed',
+      message: error.message || 'Failed to send OTP',
       details: {},
       status: 0,
     };
   }
 };
+
+// Verify OTP and get authentication token
+export const verifyOTP = async (mobile, token) => {
+  const baseUrl = getAuthBaseUrl();
+  const url = `${baseUrl}/a/auth/token/`;
+  const deviceId = getDeviceId();
+  
+  const config = {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      mobile,
+      token,
+      device_type: DEVICE_TYPE,
+      device_id: deviceId,
+    }),
+  };
+
+  try {
+    const response = await fetch(url, config);
+    if (!response.ok) {
+      const error = await parseError(response);
+      throw error;
+    }
+    return await parseJson(response);
+  } catch (error) {
+    if (error.code) throw error;
+    throw {
+      code: 'network_error',
+      message: error.message || 'Failed to verify OTP',
+      details: {},
+      status: 0,
+    };
+  }
+};
+
